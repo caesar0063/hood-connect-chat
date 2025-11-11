@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hood Connect - Private Chat</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Poppins', sans-serif;
+      background-color: #0a0a0a;
+      color: #fff;
+    }
+    header {
+      background-color: #111c33;
+      padding: 10px;
+      text-align: center;
+      font-weight: bold;
+      font-size: 18px;
+      letter-spacing: 1px;
+    }
+    #chat-box {
+      height: 70vh;
+      overflow-y: scroll;
+      padding: 15px;
+      background: url('https://i.imgur.com/5KXfXoY.jpeg') center/cover no-repeat;
+    }
+    .msg {
+      margin: 10px 0;
+      padding: 10px 15px;
+      border-radius: 12px;
+      max-width: 70%;
+      word-wrap: break-word;
+    }
+    .sent {
+      background-color: #193c6a;
+      margin-left: auto;
+      text-align: right;
+    }
+    .received {
+      background-color: #1e1e1e;
+      text-align: left;
+    }
+    #input-area {
+      display: flex;
+      padding: 10px;
+      background-color: #000;
+      border-top: 2px solid #111c33;
+    }
+    #message-input {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      border-radius: 10px;
+      outline: none;
+      font-size: 16px;
+    }
+    #send-btn {
+      background-color: #193c6a;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      margin-left: 10px;
+      padding: 10px 20px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    #send-btn:hover {
+      background-color: #265f9c;
+    }
+    #bg-upload {
+      display: block;
+      margin: 15px auto;
+      background-color: #111c33;
+      color: #fff;
+      padding: 8px 15px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+    #user-form {
+      display: flex;
+      gap: 10px;
+      margin: 20px 0 10px 0;
+      justify-content: center;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    #username,
+    #room {
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: none;
+      outline: none;
+      font-size: 15px;
+      background: #222a45;
+      color: #fff;
+    }
+    #join-btn {
+      padding: 8px 22px;
+      background: #2450a3;
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 15px;
+      cursor: pointer;
+    }
+    #join-btn:hover {
+      background: #3d6bd8;
+    }
+  </style>
+</head>
+<body>
+
+  <header>Private Chat 💬</header>
+  <button id="bg-upload">Change Background</button>
+
+  <form id="user-form">
+    <input id="username" type="text" placeholder="Your Name" required />
+    <input id="room" type="text" placeholder="Room Name" required />
+    <button id="join-btn" type="submit">Join</button>
+  </form>
+
+  <div id="chat-box"></div>
+
+  <div id="input-area" style="display:none;">
+    <input type="text" id="message-input" placeholder="Type your message..." />
+    <button id="send-btn">Send</button>
+  </div>
+
+  <script>
+    // *** Your Render WebSocket endpoint ***
+    const WS_URL = "wss://hood-connect-backend.onrender.com";
+
+    const chatBox = document.getElementById("chat-box");
+    const input = document.getElementById("message-input");
+    const sendBtn = document.getElementById("send-btn");
+    const bgUpload = document.getElementById("bg-upload");
+    const userForm = document.getElementById("user-form");
+    const usernameInput = document.getElementById("username");
+    const roomInput = document.getElementById("room");
+    const inputArea = document.getElementById("input-area");
+
+    let ws = null;
+    let username = "";
+    let room = "";
+
+    // Reuse saved name/room from previous session
+    usernameInput.value = localStorage.getItem("hoodUsername") || "";
+    roomInput.value = localStorage.getItem("hoodRoom") || "";
+
+    userForm.addEventListener("submit", function(e) {
+      e.preventDefault();
+      username = usernameInput.value.trim();
+      room = roomInput.value.trim();
+      if (!username || !room) return;
+      localStorage.setItem("hoodUsername", username);
+      localStorage.setItem("hoodRoom", room);
+      userForm.style.display = "none";
+      inputArea.style.display = "flex";
+      initWebSocket();
+    });
+
+    function initWebSocket() {
+      ws = new WebSocket(WS_URL);
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ type: "join", username: username, room: room }));
+        logSystemMsg(`You joined #${room} as ${username}`);
+      };
+      ws.onclose = () => logSystemMsg("Disconnected from server");
+      ws.onerror = () => logSystemMsg("WebSocket error.");
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === "chat") {
+          const msgDiv = document.createElement("div");
+          msgDiv.classList.add("msg");
+          msgDiv.classList.add(data.username === username ? "sent" : "received");
+          msgDiv.textContent = `${data.username}: ${data.text}`;
+          chatBox.appendChild(msgDiv);
+          chatBox.scrollTop = chatBox.scrollHeight;
+        } else if (data.type === "system" || data.type === "error") {
+          logSystemMsg(data.message);
+        }
+      };
+    }
+
+    function logSystemMsg(text) {
+      const sysDiv = document.createElement("div");
+      sysDiv.classList.add("msg", "received");
+      sysDiv.style.fontStyle = "italic";
+      sysDiv.textContent = text;
+      chatBox.appendChild(sysDiv);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    sendBtn.addEventListener("click", () => {
+      const msg = input.value.trim();
+      if (!msg || !ws || ws.readyState !== WebSocket.OPEN) return;
+      ws.send(JSON.stringify({ text: msg }));
+      input.value = "";
+    });
+
+    input.addEventListener("keypress", (e) => {
+      if (e.key === "Enter") sendBtn.click();
+    });
+
+    // === CUSTOM BACKGROUND IMAGE UPLOAD ===
+    bgUpload.addEventListener("click", () => {
+      const fileInput = document.createElement("input");
+      fileInput.type = "file";
+      fileInput.accept = "image/*";
+      fileInput.onchange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = function(event) {
+            chatBox.style.backgroundImage = `url('${event.target.result}')`;
+            localStorage.setItem("chatBackground", event.target.result);
+          };
+          reader.readAsDataURL(file);
+        }
+      };
+      fileInput.click();
+    });
+
+    // Load saved background image
+    const savedBg = localStorage.getItem("chatBackground");
+    if (savedBg) chatBox.style.backgroundImage = `url('${savedBg}')`;
+  </script>
+</body>
+</html>

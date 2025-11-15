@@ -18,14 +18,16 @@
     .message.other { text-align: left; background: #fff; border-radius: 5px; padding: 4px; margin: 5px 0;}
     #invite-link { font-size: 0.95em; background: #eef; border: 1px dashed #ccc; margin: 10px; padding: 4px; border-radius:4px;}
     #search-list, #material-list { max-height: 100px; overflow-y: auto; background: #eef; margin: 8px 0; padding: 5px; border-radius: 5px;}
-    .item { border-bottom: 1px solid #ccc; padding: 3px; }
+    .item { border-bottom: 1px solid #ccc; padding: 3px; cursor: pointer; }
+    .item:hover { background: #ddf; }
     .item:last-child { border-bottom: 0;}
   </style>
 </head>
 <body>
 <div id="container">
   <header>Hood Connect</header>
-  <!-- Login/Registration omitted for brevity; copy previous -->
+
+  <!-- Login -->
   <div id="screen-login" class="screen active">
     <form id="login-form">
       <div class="input-block">
@@ -36,6 +38,8 @@
       <button type="button" id="goto-register">Register</button>
     </form>
   </div>
+
+  <!-- Registration -->
   <div id="screen-register" class="screen">
     <form id="register-form">
       <div class="input-block">
@@ -63,13 +67,13 @@
 
   <!-- Chat UI -->
   <div id="screen-chat" class="screen">
-    <div><b>Room:</b> <span id="room-title"></span></div>
+    <div><b>Chat:</b> <span id="room-title"></span></div>
     <div id="messages"></div>
     <form id="chat-form">
       <input id="chat-input" placeholder="Type message...">
       <button type="submit">Send</button>
     </form>
-    <button id="logout-chat">Exit Room</button>
+    <button id="logout-chat">Exit Chat</button>
   </div>
 
   <!-- User Search -->
@@ -94,8 +98,8 @@
 </div>
 
 <script>
-  const API_URL = "https://hood-connect-backend2.onrender.com"; // Change to backend URL
-  const SOCKET_URL = "https://hood-connect-backend2.onrender.com"; // Change for deployed
+  const API_URL = "https://hood-connect-backend2.onrender.com";
+  const SOCKET_URL = "https://hood-connect-backend2.onrender.com";
 
   // DOM
   const screens = {
@@ -154,7 +158,6 @@
     e.preventDefault();
     const roomName = document.getElementById('room-name').value.trim();
     if (!roomName) return;
-    // Try creating room in backend (ignore error if already exists)
     await fetch(API_URL + "/api/rooms/create", {
       method: "POST", headers: {"Content-Type": "application/json"},
       body: JSON.stringify({roomName, creatorId: currentUser.userId})
@@ -196,7 +199,7 @@
     document.getElementById('invite-link').innerHTML = '';
   };
 
-  // User Search
+  // User Search (with clickable private chat)
   document.getElementById('search-form').onsubmit = async (e) => {
     e.preventDefault();
     const query = document.getElementById('search-query').value.trim();
@@ -204,9 +207,20 @@
     const data = await res.json();
     const list = document.getElementById('search-list');
     list.innerHTML = data.results && data.results.length
-      ? data.results.map(u => `<div class="item">${u.username} (${u.bio || ''})</div>`).join('')
+      ? data.results.map(u => `<div class="item" onclick="startPrivateChat('${u.username}', '${u.userId}')">${u.username} (${u.bio || 'No bio'})</div>`).join('')
       : '<div>No users found</div>';
   };
+
+  // Start Private Chat
+  function startPrivateChat(username, userId) {
+    // Create unique room ID for private chat (sorted to ensure consistency)
+    const roomId = [currentUser.userId, userId].sort().join('-');
+    currentRoom = roomId;
+    show('chat');
+    document.getElementById('room-title').textContent = `Private: ${username}`;
+    document.getElementById('invite-link').innerHTML = '';
+    connectSocket();
+  }
 
   // Study Material Upload
   document.getElementById('material-upload-form').onsubmit = async (e) => {
